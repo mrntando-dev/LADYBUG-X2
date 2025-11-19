@@ -30,10 +30,15 @@ async function updateViaGit() {
     await run('git fetch --all --prune');
     const newRev = (await run('git rev-parse origin/main')).trim();
     const alreadyUpToDate = oldRev === newRev;
-    const commits = alreadyUpToDate ? '' : await run(`git log --pretty=format:"%h %s (%an)" ${oldRev}..${newRev}`).catch(() => '');
-    const files = alreadyUpToDate ? '' : await run(`git diff --name-status ${oldRev} ${newRev}`).catch(() => '');
-    await run(`git reset --hard ${newRev}`);
-    await run('git clean -fd');
+    const commits = alreadyUpToDate ? '' : await run(`git log --pretty=format:"%h %s (%an)" $${oldRev}..$$ {newRev}`).catch(() => '');
+    const files = alreadyUpToDate ? '' : await run(`git diff --name-status $${oldRev}$$ {newRev}`).catch(() => '');
+    
+    // Only update if there are changes
+    if (!alreadyUpToDate) {
+        await run(`git reset --hard ${newRev}`);
+        await run('git clean -fd');
+    }
+    
     return { oldRev, newRev, alreadyUpToDate, commits, files };
 }
 
@@ -87,24 +92,24 @@ function downloadFile(url, dest, visited = new Set()) {
 async function extractZip(zipPath, outDir) {
     // Try to use platform tools; no extra npm modules required
     if (process.platform === 'win32') {
-        const cmd = `powershell -NoProfile -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${outDir.replace(/\\/g, '/')}' -Force"`;
+        const cmd = `powershell -NoProfile -Command "Expand-Archive -Path '$${zipPath}' -DestinationPath '$$ {outDir.replace(/\\/g, '/')}' -Force"`;
         await run(cmd);
         return;
     }
     // Linux/mac: try unzip, else 7z, else busybox unzip
     try {
         await run('command -v unzip');
-        await run(`unzip -o '${zipPath}' -d '${outDir}'`);
+        await run(`unzip -o '$${zipPath}' -d '$$ {outDir}'`);
         return;
     } catch {}
     try {
         await run('command -v 7z');
-        await run(`7z x -y '${zipPath}' -o'${outDir}'`);
+        await run(`7z x -y '$${zipPath}' -o'$$ {outDir}'`);
         return;
     } catch {}
     try {
         await run('busybox unzip -h');
-        await run(`busybox unzip -o '${zipPath}' -d '${outDir}'`);
+        await run(`busybox unzip -o '$${zipPath}' -d '$$ {outDir}'`);
         return;
     } catch {}
     throw new Error("No system unzip tool found (unzip/7z/busybox). Git mode is recommended on this panel.");
@@ -171,7 +176,7 @@ async function updateViaZip(sock, chatId, message, zipOverride) {
     // Cleanup extracted directory
     try { fs.rmSync(extractTo, { recursive: true, force: true }); } catch {}
     try { fs.rmSync(zipPath, { force: true }); } catch {}
-    return { copiedFiles: copied };
+    return { copiedFiles: copied, hasUpdate: copied.length > 0 };
 }
 
 async function restartProcess(sock, chatId, message) {
@@ -200,32 +205,61 @@ async function updateCommand(sock, chatId, message, zipOverride) {
     }
     try {
         // Minimal UX
-        await sock.sendMessage(chatId, { text: '🔄 Updating the bot, please wait…' }, { quoted: message });
+        await sock.sendMessage(chatId, { text: '🔄 Checking for updates…' }, { quoted: message });
+        
+        let shouldRestart = false;
+        
         if (await hasGitRepo()) {
-            // silent
             const { oldRev, newRev, alreadyUpToDate, commits, files } = await updateViaGit();
-            // Short message only: version info
-            const summary = alreadyUpToDate ? `✅ Already up to date: ${newRev}` : `✅ Updated to ${newRev}`;
-            console.log('[update] summary generated');
-            // silent
-            await run('npm install --no-audit --no-fund');
+            
+            if (alreadyUpToDate) {
+                await sock.sendMessage(chatId, { 
+                    text: `✅ Already up to date!\nCurrent version: ${newRev.substring(0, 7)}` 
+                }, { quoted: message });
+                return; // Don't restart if already updated
+            } else {
+                shouldRestart = true;
+                await sock.sendMessage(chatId, { 
+                    text: `✅ Updated from $${oldRev.substring(0, 7)} to$$ {newRev.substring(0, 7)}` 
+                }, { quoted: message });
+                
+                // Install dependencies if updated
+                await run('npm install --no-audit --no-fund');
+            }
         } else {
-            const { copiedFiles } = await updateViaZip(sock, chatId, message, zipOverride);
-            // silent
+            const { copiedFiles, hasUpdate } = await updateViaZip(sock, chatId, message, zipOverride);
+            
+            if (!hasUpdate || copiedFiles.length === 0) {
+                await sock.sendMessage(chatId, { 
+                    text: '✅ Already up to date!' 
+                }, { quoted: message });
+                return; // Don't restart if no files were copied
+            } else {
+                shouldRestart = true;
+            }
         }
-        try {
-            const v = require('../settings').version || '';
-            await sock.sendMessage(chatId, { text: `✅ Update done. Restarting…` }, { quoted: message });
-        } catch {
-            await sock.sendMessage(chatId, { text: '✅ Restared Successfully\n Type .ping to check latest version.' }, { quoted: message });
+        
+        // Only restart if there was an actual update
+        if (shouldRestart) {
+            try {
+                const v = require('../settings').version || '';
+                await sock.sendMessage(chatId, { 
+                    text: `✅ Update completed successfully! Restarting bot…` 
+                }, { quoted: message });
+            } catch {
+                await sock.sendMessage(chatId, { 
+                    text: '✅ Update completed successfully! Restarting bot…\nType .ping to check the latest version.' 
+                }, { quoted: message });
+            }
+            await restartProcess(sock, chatId, message);
         }
-        await restartProcess(sock, chatId, message);
+        
     } catch (err) {
         console.error('Update failed:', err);
-        await sock.sendMessage(chatId, { text: `❌ Update failed:\n${String(err.message || err)}` }, { quoted: message });
+        await sock.sendMessage(chatId, { 
+            text: `❌ Update failed:\n${String(err.message || err)}` 
+        }, { quoted: message });
     }
 }
 
 module.exports = updateCommand;
-
-
