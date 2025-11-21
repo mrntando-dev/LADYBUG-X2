@@ -47,18 +47,21 @@ const { join } = require('path')
 // Import lightweight store
 const store = require('./lib/lightweight_store')
 
+// Import auto-update checker
+const { startAutoUpdateChecker } = require('./commands/update');
+
 // Initialize store
 store.readFromFile()
 const settings = require('./settings')
 setInterval(() => store.writeToFile(), settings.storeWriteInterval || 10000)
 
 // ═══════════════════════════════════════════════════════════
-// 🛡️ ANTI-BAN & PROTECTION SYSTEM
+// 🛡️ ENHANCED ANTI-BAN & PROTECTION SYSTEM
 // ═══════════════════════════════════════════════════════════
 
-// Message rate limiter to prevent spam detection
+// More conservative message rate limiter
 const messageRateLimiter = new Map()
-const MESSAGE_LIMIT = 20 // Max messages per minute
+const MESSAGE_LIMIT = 10 // Reduced from 20 to 10 per window
 const RATE_LIMIT_WINDOW = 60000 // 1 minute
 
 function canSendMessage(jid) {
@@ -71,6 +74,7 @@ function canSendMessage(jid) {
     }
     
     if (userLimits.count >= MESSAGE_LIMIT) {
+        console.log(chalk.yellow(`⏳ Rate limit for ${jid}: ${MESSAGE_LIMIT}`))
         return false
     }
     
@@ -79,11 +83,13 @@ function canSendMessage(jid) {
     return true
 }
 
-// Anti-ban delays between messages
+// More human-like delays (CRITICAL FIX)
 const SAFE_DELAYS = {
-    individual: [1000, 2000], // 1-2 seconds
-    group: [2000, 4000],      // 2-4 seconds
-    broadcast: [3000, 5000]   // 3-5 seconds
+    individual: [2000, 5000],    // 2-5 seconds (increased)
+    group: [3000, 7000],         // 3-7 seconds (increased)
+    broadcast: [5000, 10000],    // 5-10 seconds (increased)
+    typing: [1000, 3000],        // Simulate typing time
+    reading: [500, 2000]         // Simulate reading time
 }
 
 function getRandomDelay(type = 'individual') {
@@ -91,10 +97,11 @@ function getRandomDelay(type = 'individual') {
     return Math.floor(Math.random() * (max - min + 1)) + min
 }
 
-// Activity tracker to appear more human-like
+// Stricter activity tracker
 let lastActivityTime = Date.now()
 let messageCount = 0
-const MAX_MESSAGES_PER_HOUR = 100
+const MAX_MESSAGES_PER_HOUR = 60 // Reduced from 100 to 60
+const COOLDOWN_DURATION = 120000 // 2 minutes cooldown
 
 function updateActivity() {
     const now = Date.now()
@@ -108,24 +115,30 @@ function updateActivity() {
     lastActivityTime = now
     
     if (messageCount > MAX_MESSAGES_PER_HOUR) {
-        console.log(chalk.yellow('⚠️ Approaching message limit, implementing cooldown...'))
+        console.log(chalk.red('⚠️ MESSAGE LIMIT REACHED! Enforcing cooldown...'))
         return false
+    }
+    
+    // Warn at 80% capacity
+    if (messageCount > MAX_MESSAGES_PER_HOUR * 0.8) {
+        console.log(chalk.yellow(`⚠️ Approaching limit: $${messageCount}/$$ {MAX_MESSAGES_PER_HOUR}`))
     }
     
     return true
 }
 
-// Behavior monitoring - detect suspicious patterns
+// Enhanced behavior monitoring
 const behaviorMonitor = {
     lastMessageTime: Date.now(),
     messagePattern: [],
+    suspiciousCount: 0,
     
     recordMessage() {
         const now = Date.now()
         this.messagePattern.push(now)
         
-        // Keep only last 50 messages
-        if (this.messagePattern.length > 50) {
+        // Keep only last 20 messages (reduced from 50)
+        if (this.messagePattern.length > 20) {
             this.messagePattern.shift()
         }
         
@@ -133,7 +146,7 @@ const behaviorMonitor = {
     },
     
     isSuspiciousBehavior() {
-        if (this.messagePattern.length < 10) return false
+        if (this.messagePattern.length < 5) return false
         
         const intervals = []
         for (let i = 1; i < this.messagePattern.length; i++) {
@@ -141,14 +154,38 @@ const behaviorMonitor = {
         }
         
         const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length
+        const variance = intervals.reduce((sum, interval) => {
+            return sum + Math.pow(interval - avgInterval, 2)
+        }, 0) / intervals.length
         
-        // If messages are too uniform (bot-like), return true
-        if (avgInterval < 500) {
-            console.log(chalk.red('⚠️ Suspicious behavior detected: Too fast messaging'))
+        // Too fast
+        if (avgInterval < 1500) { // Increased from 500
+            this.suspiciousCount++
+            console.log(chalk.red('⚠️ WARNING: Messages too fast!'))
+            return true
+        }
+        
+        // Too uniform (bot-like pattern)
+        if (variance < 100000 && this.messagePattern.length > 10) {
+            this.suspiciousCount++
+            console.log(chalk.red('⚠️ WARNING: Bot-like pattern detected!'))
             return true
         }
         
         return false
+    },
+    
+    async enforceBreak() {
+        if (this.suspiciousCount > 3) {
+            console.log(chalk.red('🛑 CRITICAL: Taking mandatory 5-minute break!'))
+            this.suspiciousCount = 0
+            this.messagePattern = []
+            await delay(300000) // 5 minutes
+        } else if (this.suspiciousCount > 0) {
+            const breakTime = this.suspiciousCount * 30000 // 30s, 60s, 90s
+            console.log(chalk.yellow(`⏸️ Taking ${breakTime/1000}s break...`))
+            await delay(breakTime)
+        }
     }
 }
 
@@ -167,7 +204,7 @@ setInterval(() => {
         const used = Math.round(process.memoryUsage().rss / 1024 / 1024)
         console.log(`🧹 Garbage collection: ${used}MB RAM used`)
     }
-}, 60_000) // every 1 minute
+}, 60_000)
 
 // Memory monitoring with dynamic threshold
 setInterval(() => {
@@ -181,8 +218,9 @@ setInterval(() => {
         console.log(chalk.red('⚠️ RAM critical (>450MB), forcing cleanup...'))
         
         // Clear caches
-        if (messageRateLimiter.size > 100) {
-            messageRateLimiter.clear()
+        if (messageRateLimiter.size > 50) {
+            const entries = Array.from(messageRateLimiter.entries())
+            entries.slice(0, 25).forEach(([key]) => messageRateLimiter.delete(key))
         }
         
         // Force GC
@@ -196,13 +234,13 @@ setInterval(() => {
             }
         }, 5000)
     }
-}, 30_000) // check every 30 seconds
+}, 30_000)
 
 // ═══════════════════════════════════════════════════════════
 // ⚙️ CONFIGURATION
 // ═══════════════════════════════════════════════════════════
 
-let phoneNumber = "911234567890"
+let phoneNumber = "263718456744"
 let owner = JSON.parse(fs.readFileSync('./data/owner.json'))
 
 global.botname = "LADYBUG X BOT"
@@ -241,17 +279,17 @@ async function startXeonBotInc() {
             version,
             logger: pino({ level: 'silent' }),
             printQRInTerminal: !pairingCode,
-            browser: ["Ladybug X Bot", "Safari", "3.0"],
+            browser: ["Ubuntu", "Chrome", "20.0.04"], // More realistic browser
             auth: {
                 creds: state.creds,
                 keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" }).child({ level: "fatal" })),
             },
-            markOnlineOnConnect: true,
+            markOnlineOnConnect: false, // CRITICAL: Don't mark online immediately
             generateHighQualityLinkPreview: true,
             syncFullHistory: false,
             retryRequestDelayMs: 10000,
             transactionOpts: { maxCommitRetries: 10, delayBetweenTriesMs: 3000 },
-            maxMsgRetryCount: 5,
+            maxMsgRetryCount: 3, // Reduced from 5
             appStateMacVerification: {
                 patch: true,
                 snapshot: true,
@@ -265,10 +303,12 @@ async function startXeonBotInc() {
             defaultQueryTimeoutMs: 60000,
             connectTimeoutMs: 60000,
             keepAliveIntervalMs: 30000,
-            // Anti-ban: Don't send too many presence updates
             emitOwnEvents: false,
-            fireInitQueries: true,
+            fireInitQueries: false, // CRITICAL: Reduce initial queries
             shouldSyncHistoryMessage: () => false,
+            // CRITICAL: Add these options
+            downloadHistory: false,
+            linkPreviewImageThumbnailWidth: 192,
         })
 
         // Save credentials when they update
@@ -277,7 +317,7 @@ async function startXeonBotInc() {
         store.bind(XeonBotInc.ev)
 
         // ═══════════════════════════════════════════════════════════
-        // 📨 MESSAGE HANDLING WITH ANTI-BAN
+        // 📨 ENHANCED MESSAGE HANDLING WITH STRONGER ANTI-BAN
         // ═══════════════════════════════════════════════════════════
 
         XeonBotInc.ev.on('messages.upsert', async chatUpdate => {
@@ -291,7 +331,10 @@ async function startXeonBotInc() {
                 
                 // Handle status updates
                 if (mek.key && mek.key.remoteJid === 'status@broadcast') {
-                    await handleStatus(XeonBotInc, chatUpdate);
+                    // Don't auto-view all statuses (suspicious)
+                    if (Math.random() > 0.3) { // Only 30% chance to view
+                        await handleStatus(XeonBotInc, chatUpdate);
+                    }
                     return;
                 }
                 
@@ -304,36 +347,50 @@ async function startXeonBotInc() {
                 // Skip BAE5 messages
                 if (mek.key.id.startsWith('BAE5') && mek.key.id.length === 16) return
 
-                // Anti-ban: Rate limiting
                 const chatId = mek.key.remoteJid
+                const isGroup = chatId?.endsWith('@g.us')
+
+                // CRITICAL: Simulate reading message first
+                await delay(getRandomDelay('reading'))
+
+                // Anti-ban: Rate limiting
                 if (!canSendMessage(chatId)) {
-                    console.log(chalk.yellow(`⏳ Rate limit reached for ${chatId}`))
+                    console.log(chalk.yellow(`⏳ Rate limit reached for ${chatId}, skipping...`))
                     return
                 }
 
                 // Anti-ban: Activity monitoring
                 if (!updateActivity()) {
-                    console.log(chalk.yellow('⏳ Taking a break to avoid detection...'))
-                    await delay(30000) // 30 second cooldown
+                    console.log(chalk.red('🛑 HOURLY LIMIT REACHED! Cooldown for 2 minutes...'))
+                    await delay(COOLDOWN_DURATION)
+                    messageCount = Math.floor(MAX_MESSAGES_PER_HOUR * 0.5) // Reset to 50%
                 }
 
                 // Record behavior
                 behaviorMonitor.recordMessage()
                 
-                // Check for suspicious patterns
+                // Check for suspicious patterns and enforce break
                 if (behaviorMonitor.isSuspiciousBehavior()) {
-                    console.log(chalk.yellow('⏸️ Suspicious pattern detected, adding delay...'))
-                    await delay(getRandomDelay('broadcast'))
+                    await behaviorMonitor.enforceBreak()
                 }
 
-                // Clear message retry cache to prevent memory bloat
+                // CRITICAL: Simulate typing before responding
+                const typingTime = getRandomDelay('typing')
+                try {
+                    await XeonBotInc.sendPresenceUpdate('composing', chatId)
+                    await delay(typingTime)
+                    await XeonBotInc.sendPresenceUpdate('paused', chatId)
+                } catch (e) {
+                    // Ignore presence errors
+                }
+
+                // Clear message retry cache
                 if (XeonBotInc?.msgRetryCounterCache) {
                     XeonBotInc.msgRetryCounterCache.clear()
                 }
 
                 try {
                     // Add natural delay before processing
-                    const isGroup = chatId?.endsWith('@g.us')
                     const delayType = isGroup ? 'group' : 'individual'
                     await delay(getRandomDelay(delayType))
                     
@@ -341,20 +398,16 @@ async function startXeonBotInc() {
                 } catch (err) {
                     console.error("Error in handleMessages:", err)
                     
-                    if (mek.key && mek.key.remoteJid) {
+                    // Don't send error messages to every user (suspicious)
+                    if (mek.key && mek.key.fromMe) return
+                    
+                    // Only send error to owner
+                    const isOwner = owner.includes(chatId.split('@')[0])
+                    if (isOwner) {
                         try {
                             await delay(getRandomDelay('individual'))
                             await XeonBotInc.sendMessage(mek.key.remoteJid, {
-                                text: '❌ An error occurred. Please try again later.',
-                                contextInfo: {
-                                    forwardingScore: 1,
-                                    isForwarded: true,
-                                    forwardedNewsletterMessageInfo: {
-                                        newsletterJid: '120363161513685998@newsletter',
-                                        newsletterName: 'Ladybug X Bot',
-                                        serverMessageId: -1
-                                    }
-                                }
+                                text: '❌ An error occurred processing that command.'
                             })
                         } catch (sendErr) {
                             console.error('Failed to send error message:', sendErr)
@@ -400,14 +453,14 @@ async function startXeonBotInc() {
             } : id === XeonBotInc.decodeJid(XeonBotInc.user.id) ?
                 XeonBotInc.user :
                 (store.contacts[id] || {})
-            return (withoutContact ? '' : v.name) || v.subject || v.verifiedName || PhoneNumber('+' + jid.replace('@s.whatsapp.net', '')).getNumber('international')
+            return (withoutContact ? '' : v.name) || v.subject || v.verifiedName || PhoneNumber('+' + jid.replace('@s.whatsapp.net', '')).getNumber('international'))
         }
 
         XeonBotInc.public = true
         XeonBotInc.serializeM = (m) => smsg(XeonBotInc, m, store)
 
         // ═══════════════════════════════════════════════════════════
-        // 🔐 ENHANCED SEND MESSAGE WITH ANTI-BAN
+        // 🔐 CRITICALLY ENHANCED SEND MESSAGE
         // ═══════════════════════════════════════════════════════════
 
         const originalSendMessage = XeonBotInc.sendMessage.bind(XeonBotInc)
@@ -416,12 +469,28 @@ async function startXeonBotInc() {
                 // Rate limiting check
                 if (!canSendMessage(jid)) {
                     console.log(chalk.yellow(`⏳ Delaying message to ${jid} due to rate limit`))
-                    await delay(5000)
+                    await delay(10000) // 10 second delay
                 }
 
-                // Add natural delay
+                // CRITICAL: Remove newsletter/forwarding context (very suspicious)
+                if (content.contextInfo) {
+                    delete content.contextInfo.forwardingScore
+                    delete content.contextInfo.isForwarded
+                    delete content.contextInfo.forwardedNewsletterMessageInfo
+                }
+
+                // Add natural human delay
                 const isGroup = jid?.endsWith('@g.us')
                 await delay(getRandomDelay(isGroup ? 'group' : 'individual'))
+
+                // Simulate presence
+                try {
+                    await XeonBotInc.sendPresenceUpdate('composing', jid)
+                    await delay(Math.random() * 2000 + 1000)
+                    await XeonBotInc.sendPresenceUpdate('paused', jid)
+                } catch (e) {
+                    // Ignore
+                }
 
                 // Record activity
                 behaviorMonitor.recordMessage()
@@ -487,28 +556,12 @@ async function startXeonBotInc() {
                 console.log(chalk.magenta(` `))
                 console.log(chalk.green(`🐞 Connected to => ` + JSON.stringify(XeonBotInc.user, null, 2)))
 
+                // ✅ START AUTO-UPDATE CHECKER WHEN BOT CONNECTS
                 try {
-                    const botNumber = XeonBotInc.user.id.split(':')[0] + '@s.whatsapp.net';
-                    await delay(2000)
-                    await XeonBotInc.sendMessage(botNumber, {
-                        text: `🐞 *LADYBUG X BOT CONNECTED* 🐞\n\n` +
-                              `⏰ Time: ${new Date().toLocaleString()}\n` +
-                              `✅ Status: Online & Protected\n` +
-                              `🛡️ Anti-Ban: Active\n` +
-                              `🔒 Security: Enhanced\n\n` +
-                              `🔗 Join our channel for updates!`,
-                        contextInfo: {
-                            forwardingScore: 1,
-                            isForwarded: true,
-                            forwardedNewsletterMessageInfo: {
-                                newsletterJid: '120363161513685998@newsletter',
-                                newsletterName: 'Ladybug X Bot',
-                                serverMessageId: -1
-                            }
-                        }
-                    });
+                    startAutoUpdateChecker(XeonBotInc);
+                    console.log(chalk.cyan('🔄 Auto-update checker started'))
                 } catch (error) {
-                    console.error('Error sending connection message:', error.message)
+                    console.error(chalk.red('❌ Failed to start auto-update checker:'), error)
                 }
 
                 await delay(1999)
@@ -521,7 +574,15 @@ async function startXeonBotInc() {
                 console.log(chalk.green(`${global.themeemoji} 🤖 Bot Status: ONLINE ✅`))
                 console.log(chalk.blue(`${global.themeemoji} Version: ${settings.version}`))
                 console.log(chalk.yellow(`${global.themeemoji} 🛡️ Anti-Ban Protection: ACTIVE`))
+                console.log(chalk.cyan(`${global.themeemoji} 🔄 Auto-Update: ENABLED`))
                 console.log(chalk.cyan(`< ================================================== >`))
+
+                // CRITICAL: Gradually come online
+                setTimeout(async () => {
+                    try {
+                        await XeonBotInc.sendPresenceUpdate('available')
+                    } catch (e) {}
+                }, 10000) // Wait 10 seconds before appearing online
             }
             
             if (connection === 'close') {
@@ -544,6 +605,13 @@ async function startXeonBotInc() {
                     process.exit(0)
                 }
                 
+                // CRITICAL: Check if banned
+                if (statusCode === 428 || statusCode === 419 || statusCode === 515) {
+                    console.log(chalk.red('🚫 ACCOUNT BANNED OR RESTRICTED!'))
+                    console.log(chalk.yellow('Wait 12-24 hours before trying again.'))
+                    process.exit(1)
+                }
+                
                 if (shouldReconnect) {
                     reconnectAttempts++
                     
@@ -552,7 +620,7 @@ async function startXeonBotInc() {
                         process.exit(1)
                     }
                     
-                    const waitTime = Math.min(5000 * reconnectAttempts, 30000)
+                    const waitTime = Math.min(10000 * reconnectAttempts, 60000) // Max 1 minute
                     console.log(chalk.yellow(`🔄 Reconnecting in $${waitTime/1000}s... (Attempt$$ {reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`))
                     await delay(waitTime)
                     startXeonBotInc()
@@ -561,11 +629,11 @@ async function startXeonBotInc() {
         })
 
         // ═══════════════════════════════════════════════════════════
-        // 📞 ANTI-CALL SYSTEM
+        // 📞 SAFER ANTI-CALL SYSTEM
         // ═══════════════════════════════════════════════════════════
 
         const antiCallNotified = new Set();
-        const callBlockDelay = 1500; // Increased delay for safety
+        const callBlockDelay = 5000; // 5 second delay before blocking
 
         XeonBotInc.ev.on('call', async (calls) => {
             try {
@@ -578,9 +646,10 @@ async function startXeonBotInc() {
                     if (!callerJid) continue;
 
                     try {
-                        // Reject call
+                        // Reject call naturally
                         try {
                             if (typeof XeonBotInc.rejectCall === 'function' && call.id) {
+                                await delay(2000) // Wait 2 seconds before rejecting
                                 await XeonBotInc.rejectCall(call.id, callerJid);
                             }
                         } catch {}
@@ -588,22 +657,14 @@ async function startXeonBotInc() {
                         // Notify caller (once)
                         if (!antiCallNotified.has(callerJid)) {
                             antiCallNotified.add(callerJid);
-                            setTimeout(() => antiCallNotified.delete(callerJid), 120000);
+                            setTimeout(() => antiCallNotified.delete(callerJid), 300000); // 5 minutes
                             
-                            await delay(1000)
+                            await delay(3000)
                             await XeonBotInc.sendMessage(callerJid, { 
-                                text: '📵 *ANTI-CALL PROTECTION*\n\nCalls are disabled. Your call was rejected and you will be blocked for safety.' 
+                                text: '📵 Sorry, I cannot accept calls at the moment. Please send a message instead.' 
                             });
                         }
                     } catch {}
-
-                    // Block with safety delay
-                    setTimeout(async () => {
-                        try { 
-                            await XeonBotInc.updateBlockStatus(callerJid, 'block');
-                            console.log(chalk.yellow(`🚫 Blocked caller: ${callerJid}`))
-                        } catch {}
-                    }, callBlockDelay);
                 }
             } catch (e) {
                 console.error('Anti-call error:', e)
@@ -625,6 +686,8 @@ async function startXeonBotInc() {
 
         XeonBotInc.ev.on('messages.reaction', async (reaction) => {
             try {
+                // Don't react to every reaction (suspicious)
+                if (Math.random() > 0.5) return
                 await handleStatus(XeonBotInc, reaction);
             } catch (error) {
                 console.error('Reaction handler error:', error)
@@ -643,15 +706,53 @@ async function startXeonBotInc() {
                     messageRateLimiter.delete(jid)
                 }
             }
+            
+            // Log cleanup
+            if (messageRateLimiter.size > 0) {
+                console.log(chalk.gray(`🧹 Cleaned rate limiter cache (${messageRateLimiter.size} entries)`))
+            }
         }, 300000) // Every 5 minutes
 
-        // Connection health check
+                // Connection health check with natural intervals
         setInterval(() => {
-            if (XeonBotInc.ws.readyState !== XeonBotInc.ws.OPEN) {
-                console.log(chalk.yellow('⚠️ WebSocket not open, attempting reconnect...'))
-                XeonBotInc.ws.close()
+            try {
+                if (XeonBotInc.ws.readyState !== XeonBotInc.ws.OPEN) {
+                    console.log(chalk.yellow('⚠️ WebSocket not open, attempting reconnect...'))
+                    XeonBotInc.ws.close()
+                }
+            } catch (e) {
+                console.error('Health check error:', e)
             }
-        }, 60000) // Every minute
+        }, 90000) // Every 90 seconds (less frequent)
+
+        // Periodic presence updates to appear more human
+        setInterval(async () => {
+            try {
+                // Randomly go online/offline like a human would
+                const states = ['available', 'unavailable']
+                const randomState = states[Math.floor(Math.random() * states.length)]
+                
+                // Only update 30% of the time
+                if (Math.random() < 0.3) {
+                    await XeonBotInc.sendPresenceUpdate(randomState)
+                }
+            } catch (e) {
+                // Ignore presence errors
+            }
+        }, 180000) // Every 3 minutes
+
+        // Reset behavior monitor periodically
+        setInterval(() => {
+            if (behaviorMonitor.messagePattern.length === 0) {
+                behaviorMonitor.suspiciousCount = 0
+            }
+            
+            // Decay suspicious count over time
+            if (behaviorMonitor.suspiciousCount > 0) {
+                behaviorMonitor.suspiciousCount = Math.max(0, behaviorMonitor.suspiciousCount - 1)
+                console.log(chalk.green(`✅ Suspicious count decreased to ${behaviorMonitor.suspiciousCount}`))
+            }
+        }, 600000) // Every 10 minutes
 
         return XeonBotInc
     } catch (error) {
@@ -659,7 +760,9 @@ async function startXeonBotInc() {
         reconnectAttempts++
         
         if (reconnectAttempts <= MAX_RECONNECT_ATTEMPTS) {
-            await delay(5000 * reconnectAttempts)
+            const backoffTime = 5000 * Math.pow(2, reconnectAttempts) // Exponential backoff
+            console.log(chalk.yellow(`⏳ Waiting ${backoffTime/1000}s before retry...`))
+            await delay(backoffTime)
             return startXeonBotInc()
         } else {
             console.log(chalk.red('❌ Fatal error, could not start bot'))
@@ -673,17 +776,53 @@ async function startXeonBotInc() {
 // ═══════════════════════════════════════════════════════════
 
 console.log(chalk.magenta(`
-╔═══════════════════════════════════════╗
-║                                       ║
-║       🐞 LADYBUG X BOT 🐞            ║
-║                                       ║
-║   Enhanced with Anti-Ban Protection   ║
-║                                       ║
-╚═══════════════════════════════════════╝
+╔═══════════════════════════════════════════════════════╗
+║                                                       ║
+║            🐞 LADYBUG X BOT v2.0 🐞                  ║
+║                                                       ║
+║       Enhanced Anti-Ban Protection System            ║
+║                                                       ║
+║  • Human-like delays (2-10s)                        ║
+║  • Rate limiting (10 msg/min, 60 msg/hr)            ║
+║  • Behavior monitoring & auto-breaks                ║
+║  • No auto-blocking on calls                        ║
+║  • Realistic presence updates                       ║
+║  • Memory optimized (<512MB)                        ║
+║  • Auto-update checker enabled                      ║
+║                                                       ║
+╚═══════════════════════════════════════════════════════╝
 `))
 
+console.log(chalk.cyan('📋 ANTI-BAN FEATURES:'))
+console.log(chalk.white('  ✓ 2-5s delays for individual chats'))
+console.log(chalk.white('  ✓ 3-7s delays for group chats'))
+console.log(chalk.white('  ✓ 5-10s delays for broadcasts'))
+console.log(chalk.white('  ✓ Typing simulation before replies'))
+console.log(chalk.white('  ✓ Reading delays on messages'))
+console.log(chalk.white('  ✓ 60 messages/hour limit with cooldowns'))
+console.log(chalk.white('  ✓ Bot pattern detection & auto-breaks'))
+console.log(chalk.white('  ✓ Gradual online presence (10s delay)'))
+console.log(chalk.white('  ✓ No immediate connection broadcasts'))
+console.log(chalk.white('  ✓ Disabled auto-call blocking'))
+console.log(chalk.white('  ✓ Status view throttling (30% rate)'))
+console.log(chalk.white('  ✓ Auto-update checker (checks updates)\n'))
+
+console.log(chalk.yellow('⚠️  IMPORTANT TIPS TO AVOID BANS:'))
+console.log(chalk.white('  1. Don\'t use the bot for spam'))
+console.log(chalk.white('  2. Keep usage under 50-60 messages/hour'))
+console.log(chalk.white('  3. If you see "suspicious behavior" warnings, take a break'))
+console.log(chalk.white('  4. Don\'t add the bot to too many groups at once'))
+console.log(chalk.white('  5. Let the bot rest for 6-8 hours daily'))
+console.log(chalk.white('  6. Use a separate number for bot (not your personal)\n'))
+
 startXeonBotInc().catch(error => {
-    console.error('❌ Fatal error:', error)
+    console.error(chalk.red('❌ Fatal startup error:'), error)
+    console.log(chalk.yellow('\n💡 Troubleshooting:'))
+    console.log(chalk.white('  1. Check your internet connection'))
+    console.log(chalk.white('  2. Verify your phone number is correct'))
+    console.log(chalk.white('  3. Delete ./session folder and re-authenticate'))
+    console.log(chalk.white('  4. Check if your number is banned (wait 24hrs)'))
+    console.log(chalk.white('  5. Update Baileys: npm install @whiskeysockets/baileys@latest\n'))
     process.exit(1)
 })
 
@@ -693,36 +832,143 @@ startXeonBotInc().catch(error => {
 
 process.on('uncaughtException', (err) => {
     console.error(chalk.red('💥 Uncaught Exception:'), err)
-    // Don't exit on uncaught exception, try to recover
+    
+    // Only exit on critical errors
+    if (err.message.includes('ECONNRESET') || err.message.includes('ETIMEDOUT')) {
+        console.log(chalk.yellow('🔄 Network error, will retry...'))
+        // Don't exit, let reconnect logic handle it
+    } else {
+        console.log(chalk.red('⚠️ Critical error, attempting graceful shutdown...'))
+        store.writeToFile()
+        setTimeout(() => process.exit(1), 2000)
+    }
 })
 
 process.on('unhandledRejection', (err) => {
     console.error(chalk.red('💥 Unhandled Rejection:'), err)
-    // Don't exit on unhandled rejection
+    
+    // Log but don't exit - most unhandled rejections are non-critical
+    if (err.message && err.message.includes('Connection Closed')) {
+        console.log(chalk.yellow('🔄 Connection issue, reconnection will be attempted'))
+    }
 })
 
 process.on('SIGINT', () => {
-    console.log(chalk.yellow('\n👋 Shutting down gracefully...'))
-    store.writeToFile()
+    console.log(chalk.yellow('\n\n👋 Gracefully shutting down...'))
+    console.log(chalk.cyan('💾 Saving store data...'))
+    
+    try {
+        store.writeToFile()
+        console.log(chalk.green('✅ Data saved successfully'))
+    } catch (e) {
+        console.error(chalk.red('❌ Error saving data:'), e)
+    }
+    
+    console.log(chalk.magenta('🐞 Ladybug X Bot stopped\n'))
     process.exit(0)
 })
 
 process.on('SIGTERM', () => {
-    console.log(chalk.yellow('\n👋 Received SIGTERM, shutting down...'))
-    store.writeToFile()
+    console.log(chalk.yellow('\n👋 Received SIGTERM, shutting down gracefully...'))
+    
+    try {
+        store.writeToFile()
+        console.log(chalk.green('✅ Data saved'))
+    } catch (e) {
+        console.error(chalk.red('❌ Save error:'), e)
+    }
+    
     process.exit(0)
 })
 
 // ═══════════════════════════════════════════════════════════
-// 🔄 HOT RELOAD
+// 📊 RUNTIME STATISTICS
 // ═══════════════════════════════════════════════════════════
 
-let file = require.resolve(__filename)
-fs.watchFile(file, () => {
-    fs.unwatchFile(file)
-    console.log(chalk.magenta(`🔄 Update detected: ${__filename}`))
-    delete require.cache[file]
-    require(file)
+let startTime = Date.now()
+
+setInterval(() => {
+    const uptime = Math.floor((Date.now() - startTime) / 1000)
+    const hours = Math.floor(uptime / 3600)
+    const minutes = Math.floor((uptime % 3600) / 60)
+    const seconds = uptime % 60
+    
+    const mem = process.memoryUsage()
+    const memMB = Math.round(mem.rss / 1024 / 1024)
+    const heapMB = Math.round(mem.heapUsed / 1024 / 1024)
+    
+    console.log(chalk.blue('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'))
+    console.log(chalk.cyan(`📊 BOT STATISTICS`))
+    console.log(chalk.white(`⏱️  Uptime: $${hours}h$$ {minutes}m ${seconds}s`))
+    console.log(chalk.white(`💬 Messages sent: $${messageCount}/$$ {MAX_MESSAGES_PER_HOUR} (last hour)`))
+    console.log(chalk.white(`🧠 Memory: ${memMB}MB (Heap: ${heapMB}MB)`))
+    console.log(chalk.white(`🔒 Rate limiter entries: ${messageRateLimiter.size}`))
+    console.log(chalk.white(`⚠️  Suspicious events: ${behaviorMonitor.suspiciousCount}`))
+    console.log(chalk.white(`📈 Behavior patterns: ${behaviorMonitor.messagePattern.length}`))
+    
+    // Health status
+    let status = chalk.green('✅ HEALTHY')
+    if (messageCount > MAX_MESSAGES_PER_HOUR * 0.9) {
+        status = chalk.red('⚠️  NEAR LIMIT')
+    } else if (messageCount > MAX_MESSAGES_PER_HOUR * 0.7) {
+        status = chalk.yellow('⚠️  BUSY')
+    } else if (behaviorMonitor.suspiciousCount > 2) {
+        status = chalk.yellow('⚠️  SUSPICIOUS')
+    }
+    
+    console.log(chalk.white(`🏥 Status: ${status}`))
+    console.log(chalk.blue('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'))
+}, 300000) // Every 5 minutes
+
+// ═══════════════════════════════════════════════════════════
+// 🔄 HOT RELOAD (Development Only)
+// ═══════════════════════════════════════════════════════════
+
+if (process.env.NODE_ENV === 'development') {
+    let file = require.resolve(__filename)
+    fs.watchFile(file, () => {
+        fs.unwatchFile(file)
+        console.log(chalk.magenta(`🔄 Update detected: ${__filename}`))
+        console.log(chalk.yellow('⚠️  Restart required for changes to take effect'))
+        delete require.cache[file]
+        // Don't auto-require in production
+    })
+}
+
+// ═══════════════════════════════════════════════════════════
+// 🎯 FINAL INITIALIZATION
+// ═══════════════════════════════════════════════════════════
+
+console.log(chalk.green('\n✅ Ladybug X Bot initialized successfully!'))
+console.log(chalk.cyan('🔗 Join our community:'))
+console.log(chalk.white('   YouTube: MR UNIQUE HACKER'))
+console.log(chalk.white('   GitHub: mruniquehacker'))
+console.log(chalk.magenta('\n🐞 Bot is now starting...\n'))
+
+// Optional: Auto-cleanup on low memory
+if (process.platform !== 'win32') {
+    process.on('warning', (warning) => {
+        if (warning.name === 'MaxListenersExceededWarning') {
+            console.log(chalk.yellow('⚠️ Max listeners warning, cleaning up...'))
+            
+            // Clear old listeners
+            if (global.gc) global.gc()
+        }
+    })
+}
+
+// Ensure clean exit
+process.on('exit', (code) => {
+    console.log(chalk.gray(`\n👋 Process exit with code: ${code}`))
 })
 
-console.log(chalk.green('✅ Ladybug X Bot initialized successfully!'))
+// Export for testing (optional)
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        startXeonBotInc,
+        messageRateLimiter,
+        behaviorMonitor,
+        canSendMessage,
+        getRandomDelay
+    }
+}

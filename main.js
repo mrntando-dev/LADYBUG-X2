@@ -142,12 +142,15 @@ const { anticallCommand, readState: readAnticallState } = require('./commands/an
 const { pmblockerCommand, readState: readPmBlockerState } = require('./commands/pmblocker');
 const settingsCommand = require('./commands/settings');
 const soraCommand = require('./commands/sora');
+const storeCommand = require('./commands/store');
+const supportCommand = require('./commands/support');
+const servicesCommand = require('./commands/services');
 
 // Global settings
 global.packname = settings.packname;
 global.author = settings.author;
-global.channelLink = "https://whatsapp.com/channel/0029Va90zAnIHphOuO8Msp3A";
-global.ytch = "Mr Unique Hacker";
+global.channelLink = "https://whatsapp.com/channel/0029VbC3lHmBVJkxesEFz13p";
+global.ytch = "ntandostore";
 
 // Add this near the top of main.js with other global configurations
 const channelInfo = {
@@ -396,6 +399,19 @@ async function handleMessages(sock, messageUpdate, printLog) {
                     }
                 }
                 break;
+                case userMessage === '.store':
+    await storeCommand(sock, chatId, message);
+    commandExecuted = true;
+    break;
+
+case userMessage === '.support':
+    await supportCommand(sock, chatId, message);
+    commandExecuted = true;
+    break;
+case userMessage === '.services':
+    await servicesCommand(sock, chatId, message);
+    commandExecuted = true;
+    break;
             case userMessage === '.unmute':
                 await unmuteCommand(sock, chatId, senderId);
                 break;
