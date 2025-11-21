@@ -453,11 +453,11 @@ async function startXeonBotInc() {
             } : id === XeonBotInc.decodeJid(XeonBotInc.user.id) ?
                 XeonBotInc.user :
                 (store.contacts[id] || {})
-            return (withoutContact ? '' : v.name) || v.subject || v.verifiedName || PhoneNumber('+' + jid.replace('@s.whatsapp.net', '')).getNumber('international'))
-        }
+            return (withoutContact ? '' : v.name) || v.subject || v.verifiedName || PhoneNumber('+' + jid.replace('@s.whatsapp.net', '')).getNumber('international')
+}
 
-        XeonBotInc.public = true
-        XeonBotInc.serializeM = (m) => smsg(XeonBotInc, m, store)
+XeonBotInc.public = true
+XeonBotInc.serializeM = (m) => smsg(XeonBotInc, m, store)
 
         // ═══════════════════════════════════════════════════════════
         // 🔐 CRITICALLY ENHANCED SEND MESSAGE
