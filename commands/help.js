@@ -2,191 +2,332 @@ const settings = require('../settings');
 const fs = require('fs');
 const path = require('path');
 
-// Dynamic stats calculator
-function getStats() {
-    const uptime = process.uptime();
-    const hours = Math.floor(uptime / 3600);
-    const minutes = Math.floor((uptime % 3600) / 60);
-    const seconds = Math.floor(uptime % 60);
-    
-    return {
-        uptime: `$${hours}h$$ {minutes}m ${seconds}s`,
-        memory: `${(process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2)} MB`,
-        platform: process.platform,
-        nodeVersion: process.version
-    };
-}
+async function helpCommand(sock, chatId, message) {
+    const helpMessage = `
+╭━━━━━━━━━━━━━━━━━━━━━╮
+┃  🐞 *LADYBUG X* 🐞
+┃  ━━━━━━━━━━━━━━━━━
+┃  ⚡ Version: *${settings.version || '3.0.0'}*
+┃  🛡️ Status: *SECURED*
+┃  👤 Owner: *${settings.botOwner || 'Ladybug Support'}*
+┃  🔐 Encryption: *Active*
+╰━━━━━━━━━━━━━━━━━━━━━╯
 
-// Category emojis
-const categoryIcons = {
-    general: '🌟',
-    admin: '👑',
-    owner: '⚡',
-    media: '🎨',
-    ai: '🤖',
-    fun: '🎮',
-    downloader: '📥',
-    maker: '✨',
-    anime: '🎭',
-    github: '💻'
-};
+┏━━━『 🌟 GENERAL 』━━━┓
+┃ ➥ .menu / .help
+┃ ➥ .alive / .ping
+┃ ➥ .runtime / .uptime
+┃ ➥ .owner / .support
+┃ ➥ .info / .botinfo
+┃ ➥ .rank / .level
+┃ ➥ .profile [@user]
+┃ ➥ .weather <city>
+┃ ➥ .news [category]
+┃ ➥ .quote / .motivate
+┃ ➥ .joke / .meme
+┃ ➥ .fact / .trivia
+┃ ➥ .8ball <question>
+┃ ➥ .calculator <expr>
+┃ ➥ .translate <lang> <text>
+┃ ➥ .lyrics <song>
+┃ ➥ .wiki <query>
+┃ ➥ .define <word>
+┃ ➥ .jid / .id
+┃ ➥ .url <reply>
+┃ ➥ .screenshot <url>
+┗━━━━━━━━━━━━━━━━━━━┛
 
-async function helpCommand(sock, chatId, message, args) {
-    const stats = getStats();
-    const prefix = settings.prefix || '.';
-    
-    // Check if specific category requested
-    const category = args[0]?.toLowerCase();
-    
-    if (category) {
-        return sendCategoryMenu(sock, chatId, message, category, prefix, stats);
-    }
+┏━━━『 🔐 SECURITY 』━━━┓
+┃ ➥ .antilink <on/off>
+┃ ➥ .antispam <on/off>
+┃ ➥ .antibot <on/off>
+┃ ➥ .antitag <on/off>
+┃ ➥ .antinsfw <on/off>
+┃ ➥ .antiforeign <on/off>
+┃ ➥ .antibadword <on/off>
+┃ ➥ .antidelete <on/off>
+┃ ➥ .antitoxic <on/off>
+┃ ➥ .antivirus <scan>
+┃ ➥ .blacklist <add/remove>
+┃ ➥ .whitelist <add/remove>
+┃ ➥ .filter <word>
+┃ ➥ .security <status>
+┃ ➥ .encryption <check>
+┗━━━━━━━━━━━━━━━━━━━┛
 
-    // Main menu with all categories
-    const mainMenu = `
-┏━━━『 *LADYBUG X2* 』━━━┓
-┃
-┃ ╭─────────────────
-┃ │ 🤖 *Bot:* ${settings.botName || 'Ladybug X2'}
-┃ │ 👨‍💻 *Owner:* ${settings.botOwner || 'Mr Ntando Ofc'}
-┃ │ 📌 *Version:* ${settings.version || '2.0.0'}
-┃ │ ⏰ *Uptime:* ${stats.uptime}
-┃ │ 💾 *Memory:* ${stats.memory}
-┃ │ 🖥️ *Platform:* ${stats.platform}
-┃ │ 📍 *Prefix:* ${prefix}
-┃ ╰─────────────────
-┃
-┗━━━━━━━━━━━━━━━━━━━━━
+┏━━━『 👑 ADMIN 』━━━━┓
+┃ ➥ .promote @user
+┃ ➥ .demote @user
+┃ ➥ .kick @user
+┃ ➥ .add <number>
+┃ ➥ .ban @user
+┃ ➥ .unban @user
+┃ ➥ .warn @user [reason]
+┃ ➥ .unwarn @user
+┃ ➥ .warnings @user
+┃ ➥ .mute <time>
+┃ ➥ .unmute
+┃ ➥ .delete / .del
+┃ ➥ .purge <number>
+┃ ➥ .groupinfo
+┃ ➥ .admins / .staff
+┃ ➥ .tagall [text]
+┃ ➥ .hidetag <text>
+┃ ➥ .totag <reply>
+┃ ➥ .invite <number>
+┃ ➥ .revoke / .resetlink
+┃ ➥ .lock / .unlock
+┃ ➥ .setname <name>
+┃ ➥ .setdesc <desc>
+┃ ➥ .seticon <reply>
+┃ ➥ .announce <text>
+┃ ➥ .poll <question|opt1|opt2>
+┗━━━━━━━━━━━━━━━━━━━┛
 
-╔═══════════════════════╗
-   *📚 COMMAND CATEGORIES*
-╚═══════════════════════╝
+┏━━━『 🎭 FUN & GAMES 』━━┓
+┃ ➥ .truth / .dare
+┃ ➥ .wyr (would you rather)
+┃ ➥ .ship @user1 @user2
+┃ ➥ .character @user
+┃ ➥ .simp @user
+┃ ➥ .roast @user
+┃ ➥ .compliment @user
+┃ ➥ .flirt [@user]
+┃ ➥ .iq @user
+┃ ➥ .gay @user
+┃ ➥ .sigma @user
+┃ ➥ .hack @user
+┃ ➥ .tictactoe @user
+┃ ➥ .rps <r/p/s>
+┃ ➥ .slot / .spin
+┃ ➥ .dice / .roll
+┃ ➥ .flip / .coin
+┃ ➥ .number <1-100>
+┃ ➥ .math <level>
+┃ ➥ .quiz [category]
+┗━━━━━━━━━━━━━━━━━━━┛
 
-┏━━━━━━━━━━━━━━━━━━━━━┓
-┃ ${categoryIcons.general} *GENERAL COMMANDS*
-┃ ➤ ${prefix}menu general
-┃ ➤ Total: 20 commands
-┃ ➤ Basic bot utilities
-┗━━━━━━━━━━━━━━━━━━━━━┛
+┏━━━『 🤖 AI POWERED 』━━┓
+┃ ➥ .ai <prompt>
+┃ ➥ .gpt <question>
+┃ ➥ .chatgpt <query>
+┃ ➥ .gemini <question>
+┃ ➥ .bard <query>
+┃ ➥ .blackbox <code>
+┃ ➥ .imagine <prompt>
+┃ ➥ .dalle <prompt>
+┃ ➥ .flux <description>
+┃ ➥ .stablediff <prompt>
+┃ ➥ .aiimage <text>
+┃ ➥ .enhance <reply img>
+┃ ➥ .colorize <reply img>
+┃ ➥ .upscale <reply img>
+┃ ➥ .removebg <reply img>
+┃ ➥ .blur <reply img>
+┗━━━━━━━━━━━━━━━━━━━┛
 
-┏━━━━━━━━━━━━━━━━━━━━━┓
-┃ ${categoryIcons.admin} *ADMIN COMMANDS*
-┃ ➤ ${prefix}menu admin
-┃ ➤ Total: 25 commands
-┃ ➤ Group management tools
-┗━━━━━━━━━━━━━━━━━━━━━┛
+┏━━━『 📥 DOWNLOADER 』━━┓
+┃ ➥ .play <song>
+┃ ➥ .song <name>
+┃ ➥ .video <name>
+┃ ➥ .ytmp3 <url>
+┃ ➥ .ytmp4 <url>
+┃ ➥ .ytdoc <url>
+┃ ➥ .yts <query>
+┃ ➥ .spotify <url/name>
+┃ ➥ .instagram <url>
+┃ ➥ .tiktok <url>
+┃ ➥ .facebook <url>
+┃ ➥ .twitter <url>
+┃ ➥ .threads <url>
+┃ ➥ .pinterest <url>
+┃ ➥ .mediafire <url>
+┃ ➥ .gdrive <url>
+┃ ➥ .apk <name>
+┃ ➥ .gitclone <url>
+┗━━━━━━━━━━━━━━━━━━━┛
 
-┏━━━━━━━━━━━━━━━━━━━━━┓
-┃ ${categoryIcons.owner} *OWNER COMMANDS*
-┃ ➤ ${prefix}menu owner
-┃ ➤ Total: 15 commands
-┃ ➤ Bot owner exclusive
-┗━━━━━━━━━━━━━━━━━━━━━┛
+┏━━━『 🎨 MEDIA TOOLS 』━━┓
+┃ ➥ .sticker <reply>
+┃ ➥ .steal <reply sticker>
+┃ ➥ .take <pack|author>
+┃ ➥ .toimg <reply sticker>
+┃ ➥ .tomp3 <reply video>
+┃ ➥ .tovideo <reply img>
+┃ ➥ .togif <reply video>
+┃ ➥ .tourl <reply media>
+┃ ➥ .emojimix <😊+😂>
+┃ ➥ .attp <text>
+┃ ➥ .ttp <text>
+┃ ➥ .crop <reply img>
+┃ ➥ .circle <reply img>
+┃ ➥ .round <reply img>
+┃ ➥ .beautiful <reply img>
+┃ ➥ .jail <reply img>
+┃ ➥ .wasted <reply img>
+┃ ➥ .triggered <reply img>
+┗━━━━━━━━━━━━━━━━━━━┛
 
-┏━━━━━━━━━━━━━━━━━━━━━┓
-┃ ${categoryIcons.media} *MEDIA COMMANDS*
-┃ ➤ ${prefix}menu media
-┃ ➤ Total: 18 commands
-┃ ➤ Images, stickers & edits
-┗━━━━━━━━━━━━━━━━━━━━━┛
+┏━━━『 🎪 ANIME 』━━━━┓
+┃ ➥ .anime <name>
+┃ ➥ .manga <name>
+┃ ➥ .character <name>
+┃ ➥ .waifu / .neko
+┃ ➥ .hug @user
+┃ ➥ .kiss @user
+┃ ➥ .pat @user
+┃ ➥ .slap @user
+┃ ➥ .cuddle @user
+┃ ➥ .poke @user
+┃ ➥ .feed @user
+┃ ➥ .tickle @user
+┃ ➥ .cry / .smile
+┃ ➥ .dance / .wave
+┗━━━━━━━━━━━━━━━━━━━┛
 
-┏━━━━━━━━━━━━━━━━━━━━━┓
-┃ ${categoryIcons.ai} *AI COMMANDS*
-┃ ➤ ${prefix}menu ai
-┃ ➤ Total: 5 commands
-┃ ➤ Artificial Intelligence
-┗━━━━━━━━━━━━━━━━━━━━━┛
+┏━━━『 🎯 TEXT MAKER 』━━┓
+┃ ➥ .glow <text>
+┃ ➥ .3d <text>
+┃ ➥ .neon <text>
+┃ ➥ .fire <text>
+┃ ➥ .ice <text>
+┃ ➥ .thunder <text>
+┃ ➥ .matrix <text>
+┃ ➥ .sand <text>
+┃ ➥ .blood <text>
+┃ ➥ .graffiti <text>
+┃ ➥ .metal <text>
+┃ ➥ .gold <text>
+┃ ➥ .glitch <text>
+┃ ➥ .space <text>
+┃ ➥ .neonlight <text>
+┗━━━━━━━━━━━━━━━━━━━┛
 
-┏━━━━━━━━━━━━━━━━━━━━━┓
-┃ ${categoryIcons.fun} *FUN & GAMES*
-┃ ➤ ${prefix}menu fun
-┃ ➤ Total: 15 commands
-┃ ➤ Entertainment zone
-┗━━━━━━━━━━━━━━━━━━━━━┛
+┏━━━『 🔧 TOOLS 』━━━━┓
+┃ ➥ .stalk <username>
+┃ ➥ .nowa <number>
+┃ ➥ .truecaller <number>
+┃ ➥ .whois <domain>
+┃ ➥ .ip <address>
+┃ ➥ .short <url>
+┃ ➥ .qr <text>
+┃ ➥ .readqr <reply>
+┃ ➥ .barcode <text>
+┃ ➥ .encode <text>
+┃ ➥ .decode <code>
+┃ ➥ .hash <text>
+┃ ➥ .carbon <code>
+┃ ➥ .pastebin <text>
+┃ ➥ .tempmail
+┗━━━━━━━━━━━━━━━━━━━┛
 
-┏━━━━━━━━━━━━━━━━━━━━━┓
-┃ ${categoryIcons.downloader} *DOWNLOADER*
-┃ ➤ ${prefix}menu download
-┃ ➤ Total: 8 commands
-┃ ➤ Media downloads
-┗━━━━━━━━━━━━━━━━━━━━━┛
+┏━━━『 💎 PREMIUM 』━━━┓
+┃ ➥ .premium <status>
+┃ ➥ .buypremium
+┃ ➥ .redeem <code>
+┃ ➥ .vip <features>
+┃ ➥ .unlimited <access>
+┃ ➥ .priority <support>
+┃ ➥ .custom <command>
+┗━━━━━━━━━━━━━━━━━━━┛
 
-┏━━━━━━━━━━━━━━━━━━━━━┓
-┃ ${categoryIcons.maker} *TEXT MAKER*
-┃ ➤ ${prefix}menu maker
-┃ ➤ Total: 17 commands
-┃ ➤ Logo & text effects
-┗━━━━━━━━━━━━━━━━━━━━━┛
+┏━━━『 ⚙️ OWNER ONLY 』━━┓
+┃ ➥ .mode <public/private>
+┃ ➥ .self / .public
+┃ ➥ .join <link>
+┃ ➥ .leave [chat]
+┃ ➥ .block @user
+┃ ➥ .unblock @user
+┃ ➥ .broadcast <text>
+┃ ➥ .setbio <text>
+┃ ➥ .setname <name>
+┃ ➥ .setpp <reply>
+┃ ➥ .restart / .reboot
+┃ ➥ .update / .upgrade
+┃ ➥ .backup / .restore
+┃ ➥ .eval <code>
+┃ ➥ .exec <command>
+┃ ➥ .shell <cmd>
+┃ ➥ .addprem @user
+┃ ➥ .delprem @user
+┃ ➥ .listprem
+┃ ➥ .ban @user
+┃ ➥ .unban @user
+┃ ➥ .banlist
+┃ ➥ .cleartmp
+┃ ➥ .clearsession
+┃ ➥ .getcase <cmd>
+┃ ➥ .getsession
+┗━━━━━━━━━━━━━━━━━━━┛
 
-┏━━━━━━━━━━━━━━━━━━━━━┓
-┃ ${categoryIcons.anime} *ANIME ZONE*
-┃ ➤ ${prefix}menu anime
-┃ ➤ Total: 12 commands
-┃ ➤ Anime & manga content
-┗━━━━━━━━━━━━━━━━━━━━━┛
+┏━━━『 📊 STATISTICS 』━━┓
+┃ ➥ .stats / .analytics
+┃ ➥ .leaderboard / .top
+┃ ➥ .rank / .level
+┃ ➥ .serverinfo
+┃ ➥ .groupstats
+┃ ➥ .userstats [@user]
+┗━━━━━━━━━━━━━━━━━━━┛
 
-┏━━━━━━━━━━━━━━━━━━━━━┓
-┃ ${categoryIcons.github} *DEVELOPER*
-┃ ➤ ${prefix}menu dev
-┃ ➤ Total: 5 commands
-┃ ➤ GitHub & scripts
-┗━━━━━━━━━━━━━━━━━━━━━┛
+┏━━━『💼 STORE & SUPPORT』━━┓
+┃  .store - View our services
+┃  .services - Detailed service list
+┃  .support - Get help & contact info
+┗━━━━━━━━━━━━━━━━━━━┛
 
-╔═════════════════════╗
-   *🔥 QUICK ACCESS*
-╚═════════════════════╝
+╭━━━━━━━━━━━━━━━━━━━━━╮
+┃ 🐞 *LADYBUG X v${settings.version || '3.0.0'}*
+┃ ━━━━━━━━━━━━━━━━━
+┃ 🛡️ *Secured & Encrypted*
+┃ ⚡ *Fast & Reliable*
+┃ 🔐 *Privacy Protected*
+┃ 💎 *Premium Quality*
+┃ ━━━━━━━━━━━━━━━━━
+┃ 📱 Channel: ${global.channel || 'https://whatsapp.com/channel/0029VbC3lHmBVJkxesEFz13p'}
+┃ 🌐 Support: ${global.support || 'ladybugsupportteam@acc.vsmailpro.com'}
+┃ 👤 Owner: ${settings.botOwner || 'Ladybug Support'}
+╰━━━━━━━━━━━━━━━━━━━━━╯
 
-│ 📊 ${prefix}stats - Bot statistics
-│ 🔔 ${prefix}updates - Latest features
-│ 💡 ${prefix}help <cmd> - Command info
-│ 🌐 ${prefix}ping - Speed test
-│ 👥 ${prefix}support - Get help
-
-┏━━━━━━━━━━━━━━━━━━━━━┓
-│ 🎯 *TIP:* Use ${prefix}menu <category>
-│ to view detailed commands!
-│ Example: ${prefix}menu fun
-┗━━━━━━━━━━━━━━━━━━━━━┛
-
-╔═════════════════════╗
-  *📱 STAY CONNECTED*
-╚═════════════════════╝
-
-│ 📺 YouTube: ${global.ytch || 'Not Set'}
-│ 💬 WhatsApp: ${settings.ownerNumber || 'Not Set'}
-│ ⭐ GitHub: github.com/mruniquehacker
-│ 🌐 Website: Coming Soon
-
-┏━━━━━━━━━━━━━━━━━━━━━┓
-│  © 2025 Ladybug X2
-│  Powered by Mr Unique Hacker
-│  All Rights Reserved
-┗━━━━━━━━━━━━━━━━━━━━━┛`;
+> © 2024 *LADYBUG X* - All Rights Reserved
+> *Powered by Advanced Security Systems*`;
 
     try {
-        const imagePath = path.join(__dirname, '../assets/bot_image.jpg');
+        const imagePath = path.join(__dirname, '../assets/ladybug_logo.jpg');
         
-        const buttons = [
-            { buttonId: `${prefix}menu general`, buttonText: { displayText: '🌟 General' }, type: 1 },
-            { buttonId: `${prefix}menu fun`, buttonText: { displayText: '🎮 Fun' }, type: 1 },
-            { buttonId: `${prefix}stats`, buttonText: { displayText: '📊 Stats' }, type: 1 }
-        ];
-
         if (fs.existsSync(imagePath)) {
             const imageBuffer = fs.readFileSync(imagePath);
             
             await sock.sendMessage(chatId, {
                 image: imageBuffer,
-                caption: mainMenu,
-                footer: '⚡ Ladybug X2 - The Ultimate WhatsApp Bot',
-                buttons: buttons,
-                headerType: 4,
+                caption: helpMessage,
                 contextInfo: {
                     externalAdReply: {
-                        title: '🔥 LADYBUG X2 MENU',
-                        body: `Uptime: ${stats.uptime} | Memory: ${stats.memory}`,
-                        thumbnailUrl: 'https://i.imgur.com/your-thumbnail.jpg',
-                        sourceUrl: global.ytch || 'https://youtube.com',
+                        title: '🐞 LADYBUG X - PREMIUM BOT',
+                        body: '🛡️ Secured • Smart • Reliable',
+                        thumbnailUrl: 'https://i.ibb.co/example/ladybug.jpg', // Replace with actual URL
+                        sourceUrl: global.channel || 'https://github.com',
+                        mediaType: 1,
+                        renderLargerThumbnail: true
+                    },
+                    forwardingScore: 999,
+                    isForwarded: true,
+                    forwardedNewsletterMessageInfo: {
+                        newsletterJid: '120363161',
+                        newsletterName: '🐞 LADYBUG X SECURITY',
+                        serverMessageId: -1
+                    }
+                }
+            }, { quoted: message });
+        } else {
+            console.log('⚠️ Logo not found, sending text menu...');
+            await sock.sendMessage(chatId, { 
+                text: helpMessage,
+                contextInfo: {
+                    externalAdReply: {
+                        title: '🐞 LADYBUG X - PREMIUM BOT',
+                        body: '🛡️ Secured • Smart • Reliable',
+                        thumbnailUrl: 'https://i.ibb.co/example/ladybug.jpg',
+                        sourceUrl: global.channel || 'https://github.com',
                         mediaType: 1,
                         renderLargerThumbnail: true
                     },
@@ -194,378 +335,17 @@ async function helpCommand(sock, chatId, message, args) {
                     isForwarded: true,
                     forwardedNewsletterMessageInfo: {
                         newsletterJid: '120363161513685998@newsletter',
-                        newsletterName: '⚡ Ladybug X2 Updates',
+                        newsletterName: '🐞 LADYBUG X SECURITY',
                         serverMessageId: -1
                     }
                 }
             }, { quoted: message });
-        } else {
-            await sock.sendMessage(chatId, { 
-                text: mainMenu,
-                footer: '⚡ Ladybug X2 - The Ultimate WhatsApp Bot',
-                buttons: buttons,
-                headerType: 1,
-                contextInfo: {
-                    externalAdReply: {
-                        title: '🔥 LADYBUG X2 MENU',
-                        body: `Uptime: ${stats.uptime} | Memory: ${stats.memory}`,
-                        thumbnailUrl: 'https://i.imgur.com/your-thumbnail.jpg',
-                        sourceUrl: global.ytch || 'https://youtube.com',
-                        mediaType: 1,
-                        renderLargerThumbnail: true
-                    },
-                    forwardingScore: 999,
-                    isForwarded: true
-                }
-            }, { quoted: message });
         }
     } catch (error) {
-        console.error('Error in help command:', error);
-        await sock.sendMessage(chatId, { text: mainMenu }, { quoted: message });
-    }
-}
-
-// Category-specific menus
-async function sendCategoryMenu(sock, chatId, message, category, prefix, stats) {
-    const menus = {
-        general: `
-┏━━━『 ${categoryIcons.general} *GENERAL* 』━━━┓
-┃
-┃ ╭─「 *Information* 」
-┃ │ ${prefix}help - Show this menu
-┃ │ ${prefix}menu - Command categories
-┃ │ ${prefix}ping - Check bot speed
-┃ │ ${prefix}alive - Bot status
-┃ │ ${prefix}owner - Contact owner
-┃ │ ${prefix}stats - Bot statistics
-┃ │ ${prefix}jid - Get JID info
-┃ ╰─────────────────
-┃
-┃ ╭─「 *Utilities* 」
-┃ │ ${prefix}weather <city> - Weather info
-┃ │ ${prefix}tts <text> - Text to speech
-┃ │ ${prefix}trt <text> <lang> - Translate
-┃ │ ${prefix}ss <url> - Screenshot website
-┃ │ ${prefix}url - Upload image to URL
-┃ │ ${prefix}quote - Random quote
-┃ │ ${prefix}fact - Random fact
-┃ │ ${prefix}joke - Random joke
-┃ │ ${prefix}news - Latest news
-┃ ╰─────────────────
-┃
-┃ ╭─「 *Group Info* 」
-┃ │ ${prefix}groupinfo - Group details
-┃ │ ${prefix}staff - List admins
-┃ │ ${prefix}admins - Tag all admins
-┃ │ ${prefix}vv - View once bypass
-┃ ╰─────────────────
-┃
-┗━━━━━━━━━━━━━━━━━━━━━
-
-💡 *Tip:* Use ${prefix}help <command> for detailed info
-📊 *Active Users:* Loading...
-⏰ *Uptime:* ${stats.uptime}`,
-
-        admin: `
-┏━━━『 ${categoryIcons.admin} *ADMIN* 』━━━┓
-┃
-┃ ╭─「 *Member Management* 」
-┃ │ ${prefix}ban @user - Ban member
-┃ │ ${prefix}kick @user - Remove member
-┃ │ ${prefix}promote @user - Make admin
-┃ │ ${prefix}demote @user - Remove admin
-┃ │ ${prefix}warn @user - Warn member
-┃ │ ${prefix}warnings @user - Check warnings
-┃ ╰─────────────────
-┃
-┃ ╭─「 *Group Control* 」
-┃ │ ${prefix}mute <minutes> - Mute group
-┃ │ ${prefix}unmute - Unmute group
-┃ │ ${prefix}delete - Delete message
-┃ │ ${prefix}clear - Clear messages
-┃ │ ${prefix}resetlink - Reset invite link
-┃ │ ${prefix}setgdesc <text> - Set description
-┃ │ ${prefix}setgname <name> - Set group name
-┃ │ ${prefix}setgpp - Set group picture
-┃ ╰─────────────────
-┃
-┃ ╭─「 *Broadcast* 」
-┃ │ ${prefix}tag <msg> - Tag members
-┃ │ ${prefix}tagall - Tag everyone
-┃ │ ${prefix}tagnotadmin - Tag non-admins
-┃ │ ${prefix}hidetag <msg> - Hidden tag
-┃ ╰─────────────────
-┃
-┃ ╭─「 *Security* 」
-┃ │ ${prefix}antilink <on/off> - Anti-link
-┃ │ ${prefix}antibadword <on/off> - Bad word filter
-┃ │ ${prefix}antitag <on/off> - Anti-tag
-┃ │ ${prefix}welcome <on/off> - Welcome message
-┃ │ ${prefix}goodbye <on/off> - Goodbye message
-┃ │ ${prefix}chatbot <on/off> - AI chatbot
-┃ ╰─────────────────
-┃
-┗━━━━━━━━━━━━━━━━━━━━━
-
-⚠️ *Note:* Admin commands require group admin privileges
-🔒 *Security:* All actions are logged`,
-
-        owner: `
-┏━━━『 ${categoryIcons.owner} *OWNER* 』━━━┓
-┃
-┃ ╭─「 *Bot Management* 」
-┃ │ ${prefix}mode <public/private> - Bot mode
-┃ │ ${prefix}update - Update bot
-┃ │ ${prefix}settings - View settings
-┃ │ ${prefix}setpp - Set bot profile pic
-┃ │ ${prefix}clearsession - Clear session
-┃ │ ${prefix}cleartmp - Clear temp files
-┃ ╰─────────────────
-┃
-┃ ╭─「 *Auto Features* 」
-┃ │ ${prefix}autoreact <on/off> - Auto react
-┃ │ ${prefix}autostatus <on/off> - Auto view status
-┃ │ ${prefix}autostatus react <on/off> - React to status
-┃ │ ${prefix}autotyping <on/off> - Auto typing
-┃ │ ${prefix}autoread <on/off> - Auto read messages
-┃ │ ${prefix}anticall <on/off> - Anti-call
-┃ │ ${prefix}antidelete <on/off> - Anti-delete
-┃ ╰─────────────────
-┃
-┃ ╭─「 *Privacy* 」
-┃ │ ${prefix}pmblocker <on/off> - PM blocker
-┃ │ ${prefix}pmblocker setmsg <text> - Set PM message
-┃ │ ${prefix}pmblocker status - Check status
-┃ │ ${prefix}mention <on/off> - Auto mention reply
-┃ │ ${prefix}setmention - Set mention message
-┃ ╰─────────────────
-┃
-┗━━━━━━━━━━━━━━━━━━━━━
-
-🔐 *Access:* Owner only commands
-⚡ *Power:* Full bot control`,
-
-        media: `
-┏━━━『 ${categoryIcons.media} *MEDIA* 』━━━┓
-┃
-┃ ╭─「 *Stickers* 」
-┃ │ ${prefix}sticker - Image to sticker
-┃ │ ${prefix}take <packname> - Steal sticker
-┃ │ ${prefix}tgsticker <link> - Telegram sticker
-┃ │ ${prefix}attp <text> - Animated text
-┃ │ ${prefix}emojimix <e1>+<e2> - Mix emojis
-┃ ╰─────────────────
-┃
-┃ ╭─「 *Image Editing* 」
-┃ │ ${prefix}blur - Blur image
-┃ │ ${prefix}removebg - Remove background
-┃ │ ${prefix}remini - HD enhance
-┃ │ ${prefix}crop - Crop image
-┃ │ ${prefix}simage - Sticker to image
-┃ │ ${prefix}meme - Random meme
-┃ ╰─────────────────
-┃
-┃ ╭─「 *Instagram* 」
-┃ │ ${prefix}igs <link> - Instagram download
-┃ │ ${prefix}igsc <link> - IG with caption
-┃ ╰─────────────────
-┃
-┃ ╭─「 *Photo Collections* 」
-┃ │ ${prefix}pies <country> - Country pics
-┃ │ ${prefix}china - Chinese beauty
-┃ │ ${prefix}indonesia - Indonesian beauty
-┃ │ ${prefix}japan - Japanese beauty
-┃ │ ${prefix}korea - Korean beauty
-┃ │ ${prefix}hijab - Hijab collection
-┃ ╰─────────────────
-┃
-┗━━━━━━━━━━━━━━━━━━━━━
-
-🎨 *Quality:* HD image processing
-⚡ *Speed:* Fast rendering`,
-
-        ai: `
-┏━━━『 ${categoryIcons.ai} *ARTIFICIAL INTELLIGENCE* 』━━━┓
-┃
-┃ ╭─「 *AI Chat* 」
-┃ │ ${prefix}gpt <question> - ChatGPT AI
-┃ │ ${prefix}gemini <question> - Google Gemini
-┃ │ ${prefix}8ball <question> - Magic 8 ball
-┃ ╰─────────────────
-┃
-┃ ╭─「 *AI Image Generation* 」
-┃ │ ${prefix}imagine <prompt> - Generate image
-┃ │ ${prefix}flux <prompt> - Flux AI image
-┃ │ ${prefix}sora <prompt> - Sora AI video
-┃ ╰─────────────────
-┃
-┗━━━━━━━━━━━━━━━━━━━━━
-
-🤖 *Powered by:* Latest AI models
-💡 *Smart:* Context-aware responses`,
-
-        fun: `
-┏━━━『 ${categoryIcons.fun} *FUN & GAMES* 』━━━┓
-┃
-┃ ╭─「 *Games* 」
-┃ │ ${prefix}tictactoe @user - Play TicTacToe
-┃ │ ${prefix}hangman - Hangman game
-┃ │ ${prefix}guess <letter> - Guess letter
-┃ │ ${prefix}trivia - Trivia quiz
-┃ │ ${prefix}answer <ans> - Answer trivia
-┃ │ ${prefix}truth - Truth question
-┃ │ ${prefix}dare - Dare challenge
-┃ ╰─────────────────
-┃
-┃ ╭─「 *Fun Interactions* 」
-┃ │ ${prefix}compliment @user - Compliment someone
-┃ │ ${prefix}insult @user - Roast someone
-┃ │ ${prefix}flirt - Flirt message
-┃ │ ${prefix}shayari - Hindi poetry
-┃ │ ${prefix}goodnight - Goodnight wish
-┃ │ ${prefix}roseday - Rose day special
-┃ ╰─────────────────
-┃
-┃ ╭─「 *Fun Edits* 」
-┃ │ ${prefix}character @user - Character analysis
-┃ │ ${prefix}wasted @user - Wasted meme
-┃ │ ${prefix}ship @user - Ship calculator
-┃ │ ${prefix}simp @user - Simp meter
-┃ │ ${prefix}stupid @user [text] - Stupid meme
-┃ ╰─────────────────
-┃
-┗━━━━━━━━━━━━━━━━━━━━━
-
-🎮 *Games:* Multiplayer supported
-😂 *Fun:* Entertainment guaranteed`,
-
-        download: `
-┏━━━『 ${categoryIcons.downloader} *DOWNLOADER* 』━━━┓
-┃
-┃ ╭─「 *YouTube* 」
-┃ │ ${prefix}play <song> - Play audio
-┃ │ ${prefix}song <name> - Download song
-┃ │ ${prefix}video <name> - Download video
-┃ │ ${prefix}ytmp4 <link> - YouTube MP4
-┃ ╰─────────────────
-┃
-┃ ╭─「 *Social Media* 」
-┃ │ ${prefix}spotify <query> - Spotify download
-┃ │ ${prefix}instagram <link> - Instagram download
-┃ │ ${prefix}facebook <link> - Facebook download
-┃ │ ${prefix}tiktok <link> - TikTok download
-┃ ╰─────────────────
-┃
-┗━━━━━━━━━━━━━━━━━━━━━
-
-📥 *Quality:* HD downloads
-⚡ *Speed:* Ultra-fast processing`,
-
-        maker: `
-┏━━━『 ${categoryIcons.maker} *TEXT MAKER* 』━━━┓
-┃
-┃ ╭─「 *Logo Styles* 」
-┃ │ ${prefix}metallic <text> - Metallic effect
-┃ │ ${prefix}ice <text> - Ice effect
-┃ │ ${prefix}snow <text> - Snow effect
-┃ │ ${prefix}impressive <text> - Impressive style
-┃ │ ${prefix}matrix <text> - Matrix effect
-┃ │ ${prefix}light <text> - Light effect
-┃ │ ${prefix}neon <text> - Neon glow
-┃ │ ${prefix}devil <text> - Devil style
-┃ │ ${prefix}purple <text> - Purple effect
-┃ │ ${prefix}thunder <text> - Thunder bolt
-┃ │ ${prefix}leaves <text> - Leaves effect
-┃ │ ${prefix}1917 <text> - 1917 style
-┃ │ ${prefix}arena <text> - Arena effect
-┃ │ ${prefix}hacker <text> - Hacker style
-┃ │ ${prefix}sand <text> - Sand writing
-┃ │ ${prefix}blackpink <text> - Blackpink style
-┃ │ ${prefix}glitch <text> - Glitch effect
-┃ │ ${prefix}fire <text> - Fire text
-┃ ╰─────────────────
-┃
-┗━━━━━━━━━━━━━━━━━━━━━
-
-✨ *Effects:* 17+ unique styles
-🎨 *Quality:* Professional logos`,
-
-        anime: `
-┏━━━『 ${categoryIcons.anime} *ANIME ZONE* 』━━━┓
-┃
-┃ ╭─「 *Anime Reactions* 」
-┃ │ ${prefix}nom - Nom nom animation
-┃ │ ${prefix}poke - Poke someone
-┃ │ ${prefix}cry - Crying anime
-┃ │ ${prefix}kiss - Kiss animation
-┃ │ ${prefix}pat - Pat head
-┃ │ ${prefix}hug - Hug animation
-┃ │ ${prefix}wink - Wink animation
-┃ │ ${prefix}facepalm - Facepalm reaction
-┃ ╰─────────────────
-┃
-┃ ╭─「 *Anime Memes* 」
-┃ │ ${prefix}nom - Eating animation
-┃ │ ${prefix}oogway - Master Oogway quote
-┃ │ ${prefix}lolice - Lolice meme
-┃ │ ${prefix}namecard - Anime namecard
-┃ ╰─────────────────
-┃
-┗━━━━━━━━━━━━━━━━━━━━━
-
-🎭 *Collection:* 12+ anime reactions
-⭐ *Quality:* HD anime GIFs`,
-
-        dev: `
-┏━━━『 ${categoryIcons.github} *DEVELOPER* 』━━━┓
-┃
-┃ ╭─「 *Repository* 」
-┃ │ ${prefix}git - GitHub repo
-┃ │ ${prefix}github - GitHub link
-┃ │ ${prefix}sc - Script info
-┃ │ ${prefix}script - Bot script
-┃ │ ${prefix}repo - Repository details
-┃ ╰─────────────────
-┃
-┗━━━━━━━━━━━━━━━━━━━━━
-
-💻 *Source:* Open source available
-⭐ *Star:* Support the project on GitHub`
-    };
-
-    const categoryMenu = menus[category];
-    
-    if (!categoryMenu) {
+        console.error('❌ Error in help command:', error);
         await sock.sendMessage(chatId, { 
-            text: `❌ Invalid category: *$${category}*\n\nUse$$ {prefix}menu to see all categories.`
-        }, { quoted: message });
-        return;
-    }
-
-    try {
-        await sock.sendMessage(chatId, {
-            text: categoryMenu,
-            contextInfo: {
-                externalAdReply: {
-                    title: `${categoryIcons[category]} ${category.toUpperCase()} COMMANDS`,
-                    body: `Ladybug X2 | ${stats.uptime}`,
-                    thumbnailUrl: 'https://i.imgur.com/your-thumbnail.jpg',
-                    sourceUrl: global.ytch || 'https://youtube.com',
-                    mediaType: 1,
-                    renderLargerThumbnail: true
-                },
-                forwardingScore: 999,
-                isForwarded: true,
-                forwardedNewsletterMessageInfo: {
-                    newsletterJid: '120363161513685998@newsletter',
-                    newsletterName: '⚡ Ladybug X2 Commands',
-                    serverMessageId: -1
-                }
-            }
-        }, { quoted: message });
-    } catch (error) {
-        console.error('Error sending category menu:', error);
-        await sock.sendMessage(chatId, { text: categoryMenu }, { quoted: message });
+            text: '⚠️ Error loading menu. Please try again.\n\n' + helpMessage 
+        });
     }
 }
 
