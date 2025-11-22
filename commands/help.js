@@ -269,7 +269,7 @@ async function helpCommand(sock, chatId, message) {
 > *Powered by Advanced Security Systems*`;
 
     try {
-        const imagePath = path.join(__dirname, '../assets/ladybug_logo.jpg');
+        const imagePath = path.join(__dirname, '../assets/ladybug.png');
         
         if (fs.existsSync(imagePath)) {
             const imageBuffer = fs.readFileSync(imagePath);
